@@ -1,27 +1,10 @@
 {
-  "extends": "next/core-web-vitals",
+  "extends": ["next/core-web-vitals", "prettier"],
   "rules": {
-    "indent": [
-      "error",
-      2
-    ],
-    "linebreak-style": [
-      "error",
-      "unix"
-    ],
-    "quotes": [
-      "error",
-      "single"
-    ],
+    "linebreak-style": ["error", "unix"],
     "no-empty-function": "off",
-    "semi": [
-      "error",
-      "always"
-    ],
-    "jsx-quotes": [
-      "error",
-      "prefer-double"
-    ],
+    "semi": ["error", "always"],
+    "jsx-quotes": ["error", "prefer-double"],
     "no-multiple-empty-lines": [
       "error",
       {

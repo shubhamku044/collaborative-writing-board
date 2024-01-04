@@ -24,6 +24,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "*": [
+        "./common/types/*.d.ts"
       ]
     },
     "moduleResolution": "node"
@@ -32,7 +35,8 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "./common/types/*.d.ts"
   ],
   "exclude": [
     "node_modules"
