@@ -1,12 +1,11 @@
-import { createServer } from 'http';
 import express, { Application } from 'express';
+import { createServer } from 'http';
 import next, { NextApiHandler, NextApiRequest } from 'next';
 import { Server } from 'socket.io';
 import type {
-  CtxOptions,
   ClientToServerEvents,
   ServerToClientEvents,
-} from './types';
+} from '../src/common/types/types';
 
 const port = parseInt(process.env.PORT || '3000');
 const dev = process.env.NODE_ENV !== 'production';
