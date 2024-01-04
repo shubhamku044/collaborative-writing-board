@@ -18,17 +18,19 @@ export default function Home() {
     ctxRef.current
   );
 
+  const handleResize = () => {
+    setSize({ width: window.innerWidth, height: window.innerHeight });
+  };
   useEffect(() => {
-    const handleResize = () => {
-      setSize({ width: window.innerWidth, height: window.innerHeight });
-    };
-
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
     };
   });
+  useEffect(() => {
+    handleResize();
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -83,13 +85,58 @@ export default function Home() {
 
   return (
     <div className="flex h-full w-full items-center justify-center">
-      <button onClick={() => setOptions({ lineColor: 'blue', lineWidth: 5 })}>
-        blue
-      </button>
+      <div className="absolute left-0 top-0 flex w-fit flex-col gap-4">
+        <button
+          className="rounded bg-blue-600 px-4 py-2 text-white"
+          onClick={() => setOptions({ lineColor: 'blue', lineWidth: 5 })}
+        >
+          blue
+        </button>
+        <button
+          className="rounded bg-blue-600 px-4 py-2 text-white"
+          onClick={() =>
+            setOptions((prv) => {
+              return {
+                ...prv,
+                lineWidth: prv.lineWidth + 1,
+              };
+            })
+          }
+        >
+          +
+        </button>
+        <button
+          className="rounded bg-blue-600 px-4 py-2 text-white"
+          onClick={() =>
+            setOptions((prv) => {
+              return {
+                ...prv,
+                lineWidth: prv.lineWidth - 1,
+              };
+            })
+          }
+        >
+          -
+        </button>
+      </div>
       <canvas
         className="h-full w-full"
-        onMouseDown={(e) => handleStartDrawing(e.clientX, e.clientY)}
         ref={canvasRef}
+        onMouseDown={(e) => handleStartDrawing(e.clientX, e.clientY)}
+        onMouseUp={handleEndDrawing}
+        onMouseMove={(e) => handleDraw(e.clientX, e.clientY)}
+        onTouchStart={(e) => {
+          handleStartDrawing(
+            e.changedTouches[0].clientX,
+            e.changedTouches[0].clientY
+          );
+        }}
+        onTouchEnd={handleEndDrawing}
+        onTouchMove={(e) => {
+          handleDraw(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+        }}
+        width={size.width}
+        height={size.height}
       />
     </div>
   );

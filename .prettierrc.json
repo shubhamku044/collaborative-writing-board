@@ -4,6 +4,10 @@
   "tabWidth": 2,
   "singleQuote": true,
   "jsxSingleQuote": false,
-  "plugins": ["prettier-plugin-tailwindcss"],
-  "printWidth": 80
+  "plugins": [
+    "prettier-plugin-organize-imports",
+    "prettier-plugin-tailwindcss"
+  ],
+  "printWidth": 80,
+  "tailwindConfig": "./tailwind.config.ts"
 }
