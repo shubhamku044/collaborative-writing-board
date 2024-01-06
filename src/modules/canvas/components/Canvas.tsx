@@ -1,137 +1,161 @@
 import { CANVAS_SIZE } from '@/common/constants/canvasSize';
-import { useViewportSize } from '@/common/hooks/useViewportSize';
-import { socket } from '@/common/lib/socket';
-import { useDraw } from '@/modules/canvas/hooks/Canvas.hooks';
-import { motion, useMotionValue } from 'framer-motion';
-import { KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { WheelEvent, useEffect, useRef, useState } from 'react';
 import { useKeyPressEvent } from 'react-use';
-import { drawFromSocket } from '../helpers/Canvas.helpers';
-import Minimap from './Minimap';
-
+interface Line {
+  points: { x: number; y: number }[];
+  color: string;
+  width: number;
+}
 const Canvas = () => {
+  const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [isDrawing, setIsDrawing] = useState(true);
+  const [isMouseDown, setIsMouseDown] = useState(false);
+  const lastMousePos = useRef({ x: 0, y: 0 });
+  const [lines, setLines] = useState<Line[]>([]);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const smallCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [ctx, setCtx] = useState<CanvasRenderingContext2D>();
-  const [dragging, setDragging] = useState(false);
-  const [movedMiniMap, setMovedMiniMap] = useState(false);
-  const { width, height } = useViewportSize();
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const newCtx = canvas.getContext('2d');
+    if (newCtx) setCtx(newCtx);
+  }, []);
 
   useKeyPressEvent('Control', (e) => {
-    if (e.ctrlKey && !dragging) {
-      setDragging(true);
+    if (e.ctrlKey && !isDragging) {
+      setIsDragging(true);
     }
   });
 
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const copyCanvasToSmall = () => {
-    if (smallCanvasRef.current) {
-      smallCanvasRef.current
-        ?.getContext('2d')
-        ?.drawImage(
-          canvasRef.current as HTMLCanvasElement,
-          0,
-          0,
-          CANVAS_SIZE.width,
-          CANVAS_SIZE.height
-        );
+        lines.forEach((line) => {
+          ctx.strokeStyle = line.color;
+          ctx.lineWidth = line.width / zoom;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          line.points.forEach((point, idx) => {
+            const adjustedX = (point.x + position.x) / zoom;
+            const adjustedY = (point.y + position.y) / zoom;
+            if (idx === 0) {
+              ctx.moveTo(adjustedX, adjustedY);
+            } else {
+              ctx.lineTo(adjustedX, adjustedY);
+            }
+            ctx.stroke();
+          });
+        });
+      }
+    }
+  }, [zoom, position.x, position.y, lines]);
+
+  const handleMouseWheel = (e: WheelEvent<HTMLCanvasElement>) => {
+    console.log('something with the wheel');
+    const newScale = e.deltaY > 0 ? zoom * 1.2 : zoom / 1.2;
+    setZoom(Math.min(Math.max(newScale, 0.2), 3));
+  };
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isMouseDown) console.log(e.clientX, e.clientY);
+    if (isDrawing && isMouseDown) {
+      const currentPos = {
+        x: (e.clientX - position.x) / zoom,
+        y: (e.clientY - position.y) / zoom,
+      };
+
+      setLines((prevLines) => {
+        const lastLine = prevLines[prevLines.length - 1];
+        return [
+          ...prevLines.slice(0, -1),
+          {
+            ...lastLine,
+            points: [...lastLine.points, currentPos],
+          },
+        ];
+      });
+    }
+
+    if (isDragging && isMouseDown) {
+      console.log('moving the canvas');
+      const deltaX = (e.clientX - lastMousePos.current.x) / zoom;
+      const deltaY = (e.clientY - lastMousePos.current.y) / zoom;
+
+      setPosition({
+        x: position.x + deltaX,
+        y: position.y + deltaY,
+      });
+    }
+    lastMousePos.current = { x: e.clientX, y: e.clientY };
+  };
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    console.log('mouse down');
+    setIsMouseDown(true);
+    if (isDrawing) {
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
+      const color = 'white';
+      const strokeWidth = 5;
+      setLines((prevLines) => [
+        ...prevLines,
+        {
+          points: [
+            {
+              x: (e.clientX - position.x) / zoom,
+              y: (e.clientY - position.y) / zoom,
+            },
+          ],
+          color,
+          width: strokeWidth,
+        },
+      ]);
     }
   };
-  const { drawing, handleDraw, handleEndDrawing, handleStartDrawing } = useDraw(
-    ctx,
-    dragging,
-    -x.get(),
-    -y.get(),
-    copyCanvasToSmall
-  );
-
-  useEffect(() => {
-    const newCtx = canvasRef.current?.getContext('2d');
-    if (newCtx) setCtx(newCtx);
-    function handleKeyUp(ev: KeyboardEvent): void {
-      if (!ev.ctrlKey && dragging) {
-        setDragging(false);
-      }
-    }
-
-    window.addEventListener('keyup', handleKeyUp as () => void);
-
-    return () => {
-      window.removeEventListener('keyup', handleKeyUp as () => void);
-    };
-  }, [dragging]);
-
-  useEffect(() => {
-    let movesToDrawLater: [number, number][] = [];
-    let optionsToUseLater: CtxOptions = {
-      lineColor: '',
-      lineWidth: 0,
-    };
-
-    socket.on('socket_draw', (movesToDraw, socketOptions) => {
-      if (ctx && !drawing) {
-        drawFromSocket(movesToDraw, socketOptions, ctx, copyCanvasToSmall);
-      } else {
-        movesToDrawLater = movesToDraw;
-        optionsToUseLater = socketOptions;
-      }
-    });
-
-    return () => {
-      socket.off('socket_draw');
-      if (movesToDrawLater.length && ctx) {
-        drawFromSocket(
-          movesToDrawLater,
-          optionsToUseLater,
-          ctx,
-          copyCanvasToSmall
-        );
-      }
-    };
-  }, [drawing, ctx]);
+  const handleMouseUp = () => {
+    setIsMouseDown(false);
+  };
 
   return (
     <div className="h-full w-full overflow-hidden">
-      <motion.canvas
+      <canvas
         ref={canvasRef}
         width={CANVAS_SIZE.width}
         height={CANVAS_SIZE.height}
-        className={`bg-white ${dragging && 'cursor-move'}`}
+        className={`bg-green-500 ${isDragging && 'cursor-move'}`}
         style={{
-          x,
-          y,
+          cursor: isDragging ? 'grabbing' : isDrawing ? 'crosshair' : 'grab',
         }}
-        drag={dragging}
-        dragConstraints={{
-          left: -(CANVAS_SIZE.width - width),
-          right: 0,
-          top: -(CANVAS_SIZE.height - height),
-          bottom: 0,
-        }}
-        dragElastic={0}
-        dragTransition={{ power: 0, timeConstant: 0 }}
-        onMouseDown={(e) => handleStartDrawing(e.clientX, e.clientY)}
-        onMouseUp={handleEndDrawing}
-        onMouseMove={(e) => handleDraw(e.clientX, e.clientY)}
-        onTouchStart={(e) => {
-          handleStartDrawing(
-            e.changedTouches[0].clientX,
-            e.changedTouches[0].clientY
-          );
-        }}
-        onTouchEnd={handleEndDrawing}
-        onTouchMove={(e) => {
-          handleDraw(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-        }}
+        onWheel={handleMouseWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
       />
-      <Minimap
-        ref={smallCanvasRef}
-        x={x}
-        y={y}
-        dragging={dragging}
-        setMovedMinimap={setMovedMiniMap}
-      />
+      <div className="fixed right-10 top-10 flex gap-2 rounded bg-purple-800 p-8">
+        <button
+          className="bg-blue-500 p-4"
+          onClick={() => {
+            setIsDragging(false);
+            setIsDrawing(true);
+          }}
+        >
+          Draw
+        </button>
+        <button
+          className="bg-blue-500 p-4"
+          onClick={() => {
+            setIsDragging(true);
+            setIsDrawing(false);
+          }}
+        >
+          Move
+        </button>
+      </div>
     </div>
   );
 };
